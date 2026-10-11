@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install libtiff (Ubuntu)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libtiff-dev
+
+      - name: Install libtiff (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libtiff
+
+      - uses: racket/setup-racket@v1
+        with:
+          version: stable
+
+      - name: Install package
+        run: raco pkg install --auto --link .
+
+      - name: Run tests
+        run: raco test -p tiff
+        env:
+          # Homebrew's libtiff lives in /opt/homebrew/lib, which is not in
+          # the default dlopen path.  Harmless (unused) on Linux.
+          DYLD_FALLBACK_LIBRARY_PATH: /opt/homebrew/lib
