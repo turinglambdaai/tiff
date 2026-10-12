@@ -15,7 +15,16 @@
 (define pkg-authors '("turinglambdaai"))
 (define license 'MIT)
 (define scribblings '(("tiff/scribblings/tiff.scrbl" ())))
-;; "tiff-tests.rkt" is loaded conditionally by "tiff-test.rkt" (native
-;; library probe); the scribblings module is not a test.
-(define test-omit-paths '("tiff/test/tiff-tests.rkt"
-                          "tiff/scribblings"))
+;; The catalog build farm runs `raco test --package`, executing every module
+;; in the package as a test.  The modules that load libtiff at require time
+;; cannot run on machines without the native library (the farm), so they are
+;; omitted here; the CI workflow and `raco test tiff/test/tiff-test.rkt`
+;; exercise the full suite through the probe entry point.
+(define test-omit-paths
+  '("tiff/test/tiff-tests.rkt"      ; loaded conditionally by the entry probe
+    "tiff/scribblings"              ; documentation, not tests
+    "tiff/main.rkt"
+    "tiff/private/ffi.rkt"
+    "tiff/private/decode.rkt"
+    "tiff/private/encode.rkt"
+    "tiff/private/meta.rkt"))

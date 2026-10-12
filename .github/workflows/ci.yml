@@ -36,7 +36,7 @@ jobs:
         run: raco pkg install --auto --link "$(pwd)"
 
       - name: Run tests
-        run: raco test -p tiff
+        run: raco test tiff/test/tiff-test.rkt
         env:
           # Homebrew's libtiff lives in /opt/homebrew/lib, which is not in
           # the default dlopen path.  Harmless (unused) on Linux.
