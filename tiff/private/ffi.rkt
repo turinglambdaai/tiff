@@ -300,28 +300,25 @@
 (define-libtiff TIFFVSetField/std (_fun _tif _uint32 va-param-type -> _int)
   #:c-id TIFFVSetField)
 
-;; x86-64 (SysV): the callee's va_start spills the INCOMING register args
-;; into reg_save_area, overwriting any pre-written GP vararg slots — so the
-;; vararg values must ALSO travel as real trailing arguments (rcx, r8,
-;; xmm0).  Values a tag does not read are simply never consumed.  On arm64
-;; the caller-owned va_list storage IS the source of truth (no callee-side
-;; spill into it), so no trailing arguments exist there.
-(define-libtiff TIFFVGetField/x86
-  (_fun _tif _uint32 va-param-type _int64 _int64 _double -> _int)
-  #:c-id TIFFVGetField)
-(define-libtiff TIFFVSetField/x86
-  (_fun _tif _uint32 va-param-type _int64 _int64 _double -> _int)
-  #:c-id TIFFVSetField)
+;; ARM64 ONLY: the va_list bridge.  arm64 ABIs treat the caller-built
+;; va_list storage as the source of truth, so hand-built frames are exact.
+(define (vget tif tag [v0 0] [v1 0])
+  (TIFFVGetField/std tif tag (shared-va-frame 'param)))
+(define (vset tif tag [v0 0] [v1 0])
+  (TIFFVSetField/std tif tag (shared-va-frame 'param)))
 
-(define (vget tif tag [v0 0] [v1 0] [d 0.0])
-  (if x86-64?
-      (TIFFVGetField/x86 tif tag (shared-va-frame 'param) v0 v1 d)
-      (TIFFVGetField/std tif tag (shared-va-frame 'param))))
-
-(define (vset tif tag [v0 0] [v1 0] [d 0.0])
-  (if x86-64?
-      (TIFFVSetField/x86 tif tag (shared-va-frame 'param) v0 v1 d)
-      (TIFFVSetField/std tif tag (shared-va-frame 'param))))
+;; x86-64 (SysV): call the variadic TIFFGetField/TIFFSetField DIRECTLY
+;; through the fixed-arity specializations above.  SysV delivers named args
+;; in rdi/rsi and the varargs in rdx/rcx/r8..., and the callee's va_start
+;; reads exactly those registers — there is no caller-side va_list to get
+;; wrong.  (A hand-built va_list does NOT work here: the callee's va_start
+;; spills the incoming registers over any pre-written slots, and getting
+;; gp_offset, reg_save_area alignment and the trailing-register values all
+;; right at once proved fragile — empirically verified with a diagnostic C
+;; library that direct variadic callouts DO work on x86-64.)  One caveat:
+;; float VALUE varargs (XResolution) require the caller to set %al = 1;
+;; if the callout does not, the set fails gracefully with a libtiff error.
+;; All other shapes move integers/pointers only and are unaffected.
 
 ;; Reusable scratch cells for TIFFGetField's out parameters.  Values in them
 ;; are only read after TIFFVGetField reports the tag present, so stale
@@ -346,28 +343,44 @@
 ;; reported 0).
 
 (define (get-u32 tif tag)
-  (shared-va-frame 'set-pointer! 0 cell-u32)
-  (define present? (vget tif tag (cast cell-u32 _pointer _int64)))
-  (and (= 1 present?) (ptr-ref cell-u32 _uint32)))
+  (if x86-64?
+      (let-values (([present? v] (tiff-get-field/u32 tif tag)))
+        (and (= 1 present?) v))
+      (let ([present? (begin
+                        (shared-va-frame 'set-pointer! 0 cell-u32)
+                        (vget tif tag (cast cell-u32 _pointer _int64)))])
+        (and (= 1 present?) (ptr-ref cell-u32 _uint32)))))
 
 (define (get-u16 tif tag)
-  (shared-va-frame 'set-pointer! 0 cell-u16)
-  (define present? (vget tif tag (cast cell-u16 _pointer _int64)))
-  (and (= 1 present?) (ptr-ref cell-u16 _uint16)))
+  (if x86-64?
+      (let-values (([present? v] (tiff-get-field/u16 tif tag)))
+        (and (= 1 present?) v))
+      (let ([present? (begin
+                        (shared-va-frame 'set-pointer! 0 cell-u16)
+                        (vget tif tag (cast cell-u16 _pointer _int64)))])
+        (and (= 1 present?) (ptr-ref cell-u16 _uint16)))))
 
 (define (get-float tif tag)
-  (shared-va-frame 'set-pointer! 0 cell-float)
-  (define present? (vget tif tag (cast cell-float _pointer _int64)))
-  (and (= 1 present?) (ptr-ref cell-float _float)))
+  (if x86-64?
+      (let-values (([present? v] (tiff-get-field/float tif tag)))
+        (and (= 1 present?) v))
+      (let ([present? (begin
+                        (shared-va-frame 'set-pointer! 0 cell-float)
+                        (vget tif tag (cast cell-float _pointer _int64)))])
+        (and (= 1 present?) (ptr-ref cell-float _float)))))
 
 ;; When the tag is present the out cell holds a valid char* owned by
 ;; libtiff; convert (copy) it into a Racket string.
 (define (get-string tif tag)
-  (shared-va-frame 'set-pointer! 0 cell-ptr-a)
-  (define present? (vget tif tag (cast cell-ptr-a _pointer _int64)))
-  (and (= 1 present?)
-       (let ([p (ptr-ref cell-ptr-a _pointer)])
-         (and p (cast p _pointer _string)))))
+  (if x86-64?
+      (let-values (([present? p] (tiff-get-field/string tif tag)))
+        (and (= 1 present?) p (cast p _pointer _string)))
+      (let ([present? (begin
+                        (shared-va-frame 'set-pointer! 0 cell-ptr-a)
+                        (vget tif tag (cast cell-ptr-a _pointer _int64)))])
+        (and (= 1 present?)
+             (let ([p (ptr-ref cell-ptr-a _pointer)])
+               (and p (cast p _pointer _string)))))))
 
 (define (tiff-image-width tif)       (get-u32 tif +tag-image-width+))
 (define (tiff-image-length tif)      (get-u32 tif +tag-image-length+))
@@ -390,16 +403,22 @@
 ;; Per libtiff, the FIRST extra sample is the one the RGBA interface treats
 ;; as alpha.
 (define (tiff-extrasamples tif)
-  (shared-va-frame 'set-pointer! 0 cell-u16)    ; uint16*  count
-  (shared-va-frame 'set-pointer! 1 cell-ptr-a)  ; uint16** values
-  (define present? (vget tif +tag-extrasamples+
-                         (cast cell-u16 _pointer _int64)
-                         (cast cell-ptr-a _pointer _int64)))
-  (and (= 1 present?)
-       (let ([count (ptr-ref cell-u16 _uint16)])
-         (and (> count 0)
-              (let ([p (ptr-ref cell-ptr-a _pointer)])
-                (ptr-ref p (_array/list _uint16 count)))))))
+  (if x86-64?
+      (let-values (([present? count values-ptr] (tiff-get-field/extrasamples tif +tag-extrasamples+)))
+        (and (= 1 present?)
+             (> count 0)
+             (ptr-ref values-ptr (_array/list _uint16 count))))
+      (let ([present? (begin
+                        (shared-va-frame 'set-pointer! 0 cell-u16)    ; uint16*  count
+                        (shared-va-frame 'set-pointer! 1 cell-ptr-a)  ; uint16** values
+                        (vget tif +tag-extrasamples+
+                              (cast cell-u16 _pointer _int64)
+                              (cast cell-ptr-a _pointer _int64)))])
+        (and (= 1 present?)
+             (let ([count (ptr-ref cell-u16 _uint16)])
+               (and (> count 0)
+                    (let ([p (ptr-ref cell-ptr-a _pointer)])
+                      (ptr-ref p (_array/list _uint16 count)))))))))
 
 ;; Setters raise exn:fail on failure (libtiff has already logged why).
 ;; All scalar tags go through the integer slot: 16-bit values are passed as
@@ -407,8 +426,10 @@
 ;; tags take a promoted double.
 
 (define (set-int! who tif tag value)
-  (shared-va-frame 'set-int! 0 value)
-  (unless (= 1 (vset tif tag value))
+  (unless (= 1 (if x86-64?
+                   (tiff-set-field/int tif tag value)
+                   (begin (shared-va-frame 'set-int! 0 value)
+                          (vset tif tag))))
     (error who "TIFFSetField failed for tag ~a with value ~a (details logged under the 'tiff topic)"
            tag value)))
 
@@ -425,8 +446,10 @@
   (set-int! 'tiff-set-planar-config-contig! tif +tag-planar-config+ +planarconfig-contig+))
 
 (define (set-float! who tif tag value)
-  (shared-va-frame 'set-double! 0 value)
-  (unless (= 1 (vset tif tag 0 0 value))
+  (unless (= 1 (if x86-64?
+                   (tiff-set-field/float tif tag value)
+                   (begin (shared-va-frame 'set-double! 0 value)
+                          (vset tif tag))))
     (error who "TIFFSetField failed for tag ~a with value ~a (details logged under the 'tiff topic)"
            tag value)))
 
@@ -438,8 +461,10 @@
   ;; the string into its own storage.
   (set! string-scratch
         (bytes-append (string->bytes/utf-8 s) #"\0"))
-  (shared-va-frame 'set-pointer! 0 string-scratch)
-  (unless (= 1 (vset tif tag (cast string-scratch _pointer _int64)))
+  (unless (= 1 (if x86-64?
+                   (tiff-set-field/string tif tag s)
+                   (begin (shared-va-frame 'set-pointer! 0 string-scratch)
+                          (vset tif tag))))
     (error who "TIFFSetField failed for tag ~a (details logged under the 'tiff topic)" tag)))
 
 (define (tiff-set-software! tif s) (set-string! 'tiff-set-software! tif +tag-software+ s))
@@ -457,9 +482,12 @@
 ;; ExtraSamples setter on the va_list bridge: returns the libtiff status
 ;; (1 on success, 0 on failure).
 (define (set-extrasamples/int+pointer! tif count values)
-  (shared-va-frame 'set-int! 0 count)
-  (shared-va-frame 'set-pointer! 1 values)
-  (vset tif +tag-extrasamples+ count (cast values _pointer _int64)))
+  (if x86-64?
+      (tiff-set-field/int+pointer tif +tag-extrasamples+ count values)
+      (begin
+        (shared-va-frame 'set-int! 0 count)
+        (shared-va-frame 'set-pointer! 1 values)
+        (vset tif +tag-extrasamples+ count (cast values _pointer _int64)))))
 
 ;; ---------------------------------------------------------------------------
 ;; RAII-style helpers
