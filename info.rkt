@@ -14,7 +14,6 @@
   "FFI bindings to libtiff: decode TIFF images to RGBA, encode RGBA to TIFF, and read TIFF metadata.")
 (define pkg-authors '("turinglambdaai"))
 (define license 'MIT)
-(define scribblings '(("tiff/scribblings/tiff.scrbl" ())))
 ;; The catalog build farm runs `raco test --package`, executing every module
 ;; in the package as a test.  The modules that load libtiff at require time
 ;; cannot run on machines without the native library (the farm), so they are
