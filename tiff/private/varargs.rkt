@@ -34,6 +34,13 @@
 ;;                    xmm0..xmm7 (128 bytes); GP varargs start at offset 16
 ;;                    (after the 2 named args), doubles at offset 48 with a
 ;;                    16-byte stride.
+;;                    CRITICAL: the callee's va_start spills the INCOMING
+;;                    register args into reg_save_area, overwriting the GP
+;;                    vararg slots — so the vararg values must ALSO travel
+;;                    as real trailing call arguments (rcx, r8, xmm0), not
+;;                    just be written into the slots.  Callers on x86-64
+;;                    use the trailing-arg prototypes in ffi.rkt.  The save
+;;                    area must be 16-byte aligned (movaps in va_start).
 ;;
 ;; All frames are initialized for TIFFGetField/TIFFVSetField, whose named
 ;; part is (TIFF*, uint32 tag): two named GP arguments, no named FP
@@ -91,14 +98,15 @@
 
     ;; --------------------------------------------------- container models
     [else
-     (define frame-bytes
-       (cond [x86-64? 24]    ; {u32, u32, void*, void*}
-             [arm64?  32]    ; {void*, void*, void*, int, int}
-             [else (error 'make-va-frame "unsupported architecture: ~a" arch)]))
-     (define save-bytes 192) ; 64 GP + 128 FP/VR
-     (define buf (malloc _uint8 (+ frame-bytes save-bytes) 'raw))
-     (memset buf 0 (+ frame-bytes save-bytes))
-     (define save (ptr-add buf frame-bytes))
+     ;; reg_save_area must be 16-byte aligned: on x86-64 the callee's
+     ;; va_start spills xmm registers into it with movaps, which faults on
+     ;; unaligned addresses (the container itself has no alignment needs).
+     (define raw (malloc _uint8 512 'raw))
+     (memset raw 0 512)
+     (define raw-addr (cast raw _pointer _intptr))
+     (define aligned-offset (bitwise-and (- 16 (modulo raw-addr 16)) 15))
+     (define buf (ptr-add raw aligned-offset)) ; the va_list container
+     (define save (ptr-add buf 64))            ; register save area, 16-aligned
      (cond
        [x86-64?
         (ptr-set! buf _uint32 0 16)      ; gp_offset: 2 named GP args consumed
@@ -141,4 +149,5 @@
 
 (provide va-param-type
          make-va-frame
+         x86-64?
          (rename-out [va-frame shared-va-frame]))
