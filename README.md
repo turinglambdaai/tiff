@@ -1,5 +1,7 @@
 # tiff
 
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
 FFI bindings to [libtiff](https://libtiff.gitlab.io/libtiff/) for Racket:
 decode any TIFF that libtiff can read into RGBA pixels, encode RGBA pixels
 into TIFF, and read basic metadata.
@@ -13,6 +15,8 @@ bundled C code, no compilation).
 ```sh
 raco pkg install tiff          # from the package catalog
 # or, from a checkout of this repository:
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 raco pkg install --link /path/to/tiff
 ```
 
@@ -111,8 +115,14 @@ versioned names first).
 
 ```sh
 # The env var is optional on this package (it falls back to Homebrew's
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 # lib directory automatically), but it is the documented, always-works
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 # invocation on macOS.
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib raco pkg install --auto --link .
 DYLD_FALLBACK_LIBRARY_PATH=/opt/homebrew/lib raco test -p tiff
 ```
@@ -128,6 +138,8 @@ Tests run on GitHub Actions against Ubuntu (apt `libtiff-dev`) and macOS
 
 ```sh
 # 1. draw the PNG (from a scratch directory)
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 racket -e '(require racket/draw racket/class)
 (define bm (make-bitmap 7 5 #f))
 (define dc (send bm make-dc))
@@ -136,6 +148,8 @@ racket -e '(require racket/draw racket/class)
 (send bm save-file "tiny-red.png" (quote png))'
 
 # 2. convert with sips
+
+[![CI](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml/badge.svg)](https://github.com/turinglambdaai/tiff/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 sips -s format tiff tiny-red.png --out test/data/golden-sips-red-7x5.tiff
 ```
 
