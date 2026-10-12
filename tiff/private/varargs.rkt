@@ -109,7 +109,9 @@
      (define save (ptr-add buf 64))            ; register save area, 16-aligned
      (cond
        [x86-64?
-        (ptr-set! buf _uint32 0 16)      ; gp_offset: 2 named GP args consumed
+        (ptr-set! buf _uint32 0 24)      ; gp_offset: 3 named GP args consumed
+                                         ; (tif, tag, va_list) — NOT 2: the
+                                         ; va_list parameter itself is named!
         (ptr-set! buf _uint32 1 48)      ; fp_offset: no named FP args
         (ptr-set! buf _pointer 2 save)   ; overflow_arg_area (never used here)
         (ptr-set! buf _pointer 3 save)]  ; reg_save_area
@@ -119,9 +121,9 @@
         (ptr-set! buf _pointer 0 save)               ; __stack (unused)
         (ptr-set! buf _pointer 1 (ptr-add gp 64))    ; __gr_top
         (ptr-set! buf _pointer 2 (ptr-add vr 128))   ; __vr_top
-        (ptr-set! buf _int32 3 -48)                  ; __gr_offs: 2 named GP
+        (ptr-set! buf _int32 3 -40)                  ; __gr_offs: 3 named GP
         (ptr-set! buf _int32 4 -128)])               ; __vr_offs: no named FP
-     (define (gp-offset i) (+ 16 (* 8 i)))   ; after 2 named GP args
+     (define (gp-offset i) (+ 24 (* 8 i)))   ; after 3 named GP args
      (define (fp-offset i)
        ;; x86-64: FP area at reg_save_area+48, 16-byte stride
        ;; arm64:  VR area at __vr_top-128 = save+64, 16-byte stride
