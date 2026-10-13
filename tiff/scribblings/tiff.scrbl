@@ -71,6 +71,23 @@ The constructor checks the byte-string length.
 
 @section{Reading and writing}
 
+@defstruct*[rgba ([width exact-positive-integer?]
+                   [height exact-positive-integer?]
+                   [data bytes?])]{
+ Decoded pixels: 8-bit RGBA, row-major, @racket[(* width height 4)] bytes.}
+
+@defstruct*[info ([width exact-positive-integer?]
+                  [height exact-positive-integer?]
+                  [bits-per-sample (integer-in 1 65535)]
+                  [samples-per-pixel (integer-in 1 65535)]
+                  [compression symbol?])]{
+ TIFF metadata as stored — @racket[bits-per-sample] and
+ @racket[samples-per-pixel] come straight from the tags.}
+
+@defthing[compression-mode/c contract?]{One of @racket['none],
+ @racket['lzw], @racket['deflate], @racket['packbits] — accepted by
+ @racket[rgba->tiff] as @racket[#:compression].}
+
 @defproc[(tiff-info [path path-string?]) info?]{
 
 Returns basic metadata for the first directory of @racket[path]:
